@@ -53,7 +53,7 @@ export const signInAction = async (formData: FormData) => {
     return encodedRedirect("error", "/sign-in", error.message);
   }
 
-  return redirect("/protected");
+  return redirect(`/protected/admin`);
 };
 
 export const forgotPasswordAction = async (formData: FormData) => {
@@ -92,12 +92,11 @@ export const forgotPasswordAction = async (formData: FormData) => {
 
 export const resetPasswordAction = async (formData: FormData) => {
   const supabase = await createClient();
-
   const password = formData.get("password") as string;
   const confirmPassword = formData.get("confirmPassword") as string;
 
   if (!password || !confirmPassword) {
-    encodedRedirect(
+    return encodedRedirect(
       "error",
       "/protected/reset-password",
       "Password and confirm password are required",
@@ -105,7 +104,7 @@ export const resetPasswordAction = async (formData: FormData) => {
   }
 
   if (password !== confirmPassword) {
-    encodedRedirect(
+    return encodedRedirect(
       "error",
       "/protected/reset-password",
       "Passwords do not match",
@@ -117,18 +116,54 @@ export const resetPasswordAction = async (formData: FormData) => {
   });
 
   if (error) {
-    encodedRedirect(
+    return encodedRedirect(
       "error",
       "/protected/reset-password",
       "Password update failed",
     );
   }
 
-  encodedRedirect("success", "/protected/reset-password", "Password updated");
-};
+  //Calls for the user info.
+
+  const { data: userSession, error: sessionError } = await supabase.auth.getUser();
+
+  if (sessionError || !userSession.user) {
+    return encodedRedirect(
+      "error",
+      "/sign-in",
+      "User combination required. Please sign-in."
+    );
+  }
+
+  //Waits for the call to be answered and fetches user role.
+
+  const { data: userData, error: userError } = await supabase
+    .from("users")
+    .select("role")
+    .eq("id", userSession.user.id)
+    .single();
+
+  //Similiar throw from boilder-plate code.
+
+  if (userError || !userData) {
+    return encodedRedirect(
+      "error",
+      "/sign-in",
+      "User combination required. Please sign-in."
+    );
+  }
+
+  if (userData.role === "admin") {
+    return redirect("/admin");
+  }
+  //Why I even messed with the boiler-plate code ^^
+
+  return encodedRedirect("success", "/protected/reset-password", "Password updated");
+}
 
 export const signOutAction = async () => {
   const supabase = await createClient();
   await supabase.auth.signOut();
   return redirect("/sign-in");
 };
+
